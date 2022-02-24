@@ -68,42 +68,50 @@ func findGoStmts(path string) {
 	}
 
 	// DEBUG
-	// var v visitor
-	// ast.Walk(v, astFile)
+	var v visitor
+	ast.Walk(v, astFile)
 
 	ast.Inspect(astFile, func(n ast.Node) bool {
 		goStmt, ok := n.(*ast.GoStmt)
-		if ok {
-			fmt.Printf("Go statement found at file: %s position:%d \n", path, goStmt.Pos())
+		if !ok {
+			return true
+		}
 
-			call := goStmt.Call
+		fmt.Printf("Go statement found at file: %s position: %d \n", path, goStmt.Pos())
 
-			switch fun := call.Fun.(type) {
-			case *ast.FuncLit:
-				if !checkFuncLit(fun) {
-					fmt.Printf("First statement should be '%s'\n", panicDefer)
-				}
-			case *ast.Ident:
-				if fun.Name != panicFn {
-					fmt.Printf("Deferred function should be '%s()'\n", panicFn)
-				}
-			case *ast.SelectorExpr:
-				pkg, ok := fun.X.(*ast.Ident)
-				if ok {
-					if pkg.Name != panicPkg {
-						fmt.Printf("Deferred function should call '%s()' in '%s' package\n", panicFn, panicPkg)
-					}
-				}
+		call := goStmt.Call
+		var err error
 
-				if fun.Sel.Name != panicFn {
-					fmt.Printf("Deferred function should be '%s()'\n", panicFn)
+		switch fun := call.Fun.(type) {
+		case *ast.FuncLit:
+			if !checkFuncLit(fun) {
+				err = fmt.Errorf("first statement should be '%s'", panicDefer)
+			}
+		case *ast.Ident:
+			if fun.Name != panicFn {
+				err = fmt.Errorf("deferred function should be '%s()'", panicFn)
+			}
+		case *ast.SelectorExpr:
+			pkg, ok := fun.X.(*ast.Ident)
+			if ok {
+				if pkg.Name != panicPkg {
+					err = fmt.Errorf("deferred function should call '%s()' in '%s' package", panicFn, panicPkg)
 				}
-			default:
-				fmt.Println("Go statement should always call a func lit")
 			}
 
-			fmt.Println()
+			if fun.Sel.Name != panicFn {
+				err = fmt.Errorf("deferred function should be '%s()'", panicFn)
+			}
+		default:
+			err = fmt.Errorf("go statement should always call a func lit")
 		}
+
+		if err != nil {
+			fmt.Printf("Error: %v\n\n", err)
+			return false
+		}
+
+		fmt.Println("Successful statement :)")
 
 		return true
 	})
@@ -135,6 +143,5 @@ func (v visitor) Visit(n ast.Node) ast.Visitor {
 		return nil
 	}
 	fmt.Printf("%s%T\n", strings.Repeat("\t", int(v)), n)
-	fmt.Printf("%s", v)
 	return v + 1
 }
